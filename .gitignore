@@ -1,0 +1,23 @@
+# Python
+**/__pycache__/
+*.pyc
+*.pth
+*.pt
+*.sh
+# Models & Resources
+code/models/
+**/resources/
+
+# Environment
+code/.env
+
+# Dependencies
+code/node_modules/
+
+# Build artifacts
+code/dist/
+**/.parcel-cache/
+
+# Project specific
+code/ProactiveAgent/
+*.deb

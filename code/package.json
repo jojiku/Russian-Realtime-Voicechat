@@ -1,0 +1,15 @@
+{
+  "name": "voice-sphere",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "parcel static/index.html",
+    "build": "parcel build static/index.html --dist-dir static --public-url ./static"
+  },
+  "dependencies": {
+    "three": "^0.158.0"
+  },
+  "devDependencies": {
+    "parcel": "^2.16.3",
+    "parcel-reporter-static-files-copy": "^1.5.3"
+  }
+}
