@@ -19,6 +19,11 @@
 - 🔄 Прерывание речи бота
 - 🎯 Context awareness (fine-tuned distilbert).
 
+##Credits
+Замечательный код от Kolja Beigel
+- https://github.com/KoljaB/RealtimeTTS
+- https://github.com/KoljaB/RealtimeVoiceChat
+- https://github.com/KoljaB/RealtimeSTT
 
 ## License 📜
 **MIT License**
