@@ -31,7 +31,8 @@ def suppress_jack_spam():
         os.close(original_stderr_fd)
 
 import pyaudio
-from RealtimeTTS import TextToAudioStream, KokoroEngine
+from RealtimeTTS import TextToAudioStream
+from silero_engine import SileroEngine
 
 import struct
 import threading
@@ -53,10 +54,10 @@ load_dotenv()
 language = os.getenv('APP_LANG')
 LANGUAGE = language
 # Default configuration constants
-START_ENGINE = "kokoro" 
+START_ENGINE = "silero" 
 Silence = namedtuple("Silence", ("comma", "sentence", "default"))
 ENGINE_SILENCES = {
-    "kokoro":  Silence(comma=0.3, sentence=0.6, default=0.3)
+    "silero": Silence(comma=0.3, sentence=0.6, default=0.3)
     }
 
 QUICK_ANSWER_STREAM_CHUNK_SIZE = 8
@@ -105,29 +106,16 @@ class AudioProcessor:
         self.silence = ENGINE_SILENCES.get(engine, ENGINE_SILENCES[self.engine_name])
         self.current_stream_chunk_size = QUICK_ANSWER_STREAM_CHUNK_SIZE
 
-        self.engine = KokoroEngine(
-                voice="af_heart",
-                default_speed=1,
-                trim_silence=True,
-                silence_threshold=0.01,
-                extra_start_ms=25,
-                extra_end_ms=15,
-                fade_in_ms=15,
-                fade_out_ms=10,
-            )
-        
+        self.engine = SileroEngine(chunk_size=2048)
         self.stream = TextToAudioStream(
-                self.engine,
-                muted=True, 
-                playout_chunk_size=4096, 
-                on_audio_stream_stop=self.on_audio_stream_stop,
-                language=LANGUAGE,
-                log_characters=False,
-                on_word=self.process_word
-            )
+            self.engine,
+            muted=True, # Do not play audio directly
+            playout_chunk_size=4096, # Internal chunk size for processing
+            frames_per_buffer=2048,
+            on_audio_stream_stop=self.on_audio_stream_stop)
             
         # Prewarm the engine
-        self.stream.feed("prewarm")
+        self.stream.feed("Разгон ТТС")
         play_kwargs = dict(
             log_synthesized_text=False, # Don't log prewarm text
             muted=False,
@@ -152,7 +140,7 @@ class AudioProcessor:
             if ttfa is None:
                 ttfa = time.time() - start_time
         
-        self.stream.feed("This is a test sentence to measure the time to first audio chunk.")
+        self.stream.feed("Это первое предложение чтобы оценить скорость работы аудио")
         play_kwargs_ttfa = dict(
             on_audio_chunk=on_audio_chunk_ttfa,
             log_synthesized_text=False,

@@ -1,6 +1,6 @@
 import logging
 logger = logging.getLogger(__name__)
-
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import transformers
 import collections
 import threading
@@ -12,10 +12,9 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
-# Configuration constants
-model_dir_local = "KoljaB/SentenceFinishedClassification"
-model_dir_cloud = "/root/models/sentenceclassification/"
-sentence_end_marks = ['.', '!', '?', '。'] # Characters considered sentence endings
+model_dir = "Silxxor/russian-turn-detector"
+
+sentence_end_marks = ['.', '!', '?', '。'] 
 
 # Anchor points for probability-to-pause interpolation
 anchor_points = [
@@ -200,7 +199,6 @@ class TurnDetection:
             pipeline_latency: Estimated base latency of the STT/processing pipeline in seconds.
             pipeline_latency_overhead: Additional buffer added to the pipeline latency.
         """
-        model_dir = model_dir_local if local else model_dir_cloud
 
         self.on_new_waiting_time = on_new_waiting_time
         self.current_waiting_time: float = -1 # Tracks the last suggested time
@@ -219,8 +217,8 @@ class TurnDetection:
         logger.info(f"🎤🔌 Using device: {self.device}")
 
 
-        self.tokenizer = transformers.DistilBertTokenizerFast.from_pretrained(model_dir)
-        self.classification_model = transformers.DistilBertForSequenceClassification.from_pretrained(model_dir)
+        self.tokenizer = AutoTokenizer.from_pretrained(model_dir)
+        self.classification_model = AutoModelForSequenceClassification.from_pretrained(model_dir)
         self.classification_model.to(self.device)
         self.classification_model.eval() # Set model to evaluation mode
         self.max_length: int = 128 # Max sequence length for the model
@@ -557,3 +555,37 @@ class TurnDetection:
         #         self.text_queue.task_done()
         #     except queue.Empty:
         #         break
+
+if __name__ == "__main__":
+    import time
+    import logging
+
+    logging.basicConfig(level=logging.INFO)
+
+    def on_waiting_time_callback(pause_duration: float, text: str):
+        print(f"\n✅ Suggested pause: {pause_duration:.2f}s for text: '{text}'")
+
+    # Initialize
+    detector = TurnDetection(
+        on_new_waiting_time=on_waiting_time_callback,
+        local=True,
+        pipeline_latency=0.5
+    )
+
+    # Test cases
+    test_texts = [
+        "посмотрим, увидим",        
+        "да я его в гробу",     
+        "Чего зачем ты",                  
+        "Прекрасно ты сегодня",             
+        "Ну...",                    
+        "Что думаешь насчет",   
+        "Привет как дела",
+    ]
+
+    for text in test_texts:
+        print(f"\n🔹 Testing: '{text}'")
+        detector.calculate_waiting_time(text)
+        time.sleep(2)  # Wait for processing
+
+    time.sleep(3)  # Final wait for queue to finish

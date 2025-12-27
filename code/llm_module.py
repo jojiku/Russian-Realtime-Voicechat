@@ -553,7 +553,7 @@ class LLM:
             True if the prewarm generation completed successfully (even with no content),
             False if initialization or generation failed after retries.
         """
-        prompt = "Respond with only the word 'OK'."
+        prompt = "Ответь только словом 'ОК'."
         
         
 

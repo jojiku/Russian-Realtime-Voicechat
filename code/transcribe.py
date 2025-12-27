@@ -56,7 +56,7 @@ DEFAULT_RECORDER_CONFIG: Dict[str, Any] = {
     "allowed_latency_limit": 500,
     # Callbacks will be added dynamically in _create_recorder
     "debug_mode": True,
-    "initial_prompt_realtime": "Hi how are you",
+    "initial_prompt_realtime": "Привет как дела",
     "faster_whisper_vad_filter": False,
 }
 
@@ -451,7 +451,7 @@ class TranscriptionProcessor:
         """
         text = text.lower()
         # Remove all non-alphanumeric characters (keeping spaces)
-        text = re.sub(r'[^\w\s]', '', text, flags=re.UNICODE) # Keep spaces for SequenceMatcher
+        text = re.sub(r'[^a-zA-Zа-яА-ЯёЁ0-9\s]', '', text, flags=re.UNICODE) # Keep spaces for SequenceMatcher
         # Remove extra whitespace and trim
         text = re.sub(r'\s+', ' ', text).strip()
         return text

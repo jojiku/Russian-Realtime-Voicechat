@@ -35,8 +35,8 @@ load_dotenv()
 # These constants define what Lucy is when she wakes up.
 # ============================================================================
 
-TTS_START_ENGINE = "kokoro"
-LLM_START_MODEL = "exaone-3.5-2.4b-instruct"
+TTS_START_ENGINE = "silero"
+LLM_START_MODEL = "vikhrmodels-vikhr-llama-3.2-1b-instruct"
 LLM_START_PROVIDER = "lmstudio"
 language = os.getenv('APP_LANG')
 LANGUAGE_APP = language
@@ -135,6 +135,34 @@ console = Console()
 # ========================================================================================================================================================
 
 
+class SileroAudioConverter:
+    """
+    Converter for Silero audio output.  
+    RealtimeTTS converts Silero's float32 to int16 internally,
+    so we just need to base64 encode it directly.
+    """
+    def __init__(self):
+        self.chunk_count = 0
+    
+    def get_base64_chunk(self, chunk:  bytes) -> str:
+        if not chunk:
+            return ""
+        
+        import base64
+        import numpy as np
+        
+        self.chunk_count += 1
+        
+        # RealtimeTTS already converted to int16, so just encode directly
+        # DEBUG:  Verify on first few chunks
+        if self.chunk_count <= 3:
+            as_int16 = np.frombuffer(chunk, dtype=np.int16)
+        return base64.b64encode(chunk).decode('utf-8')
+    
+    def flush_base64_chunk(self) -> str:
+        return None
+
+
 class NoCacheStaticFiles(StaticFiles):
     async def get_response(self, path: str, scope: Dict[str, Any]) -> Response:
         response: Response = await super().get_response(path, scope)
@@ -231,8 +259,8 @@ async def lifespan(app: FastAPI):
         # with suppress_c_logs(): # Kills C-level stderr (JACK)
         #     with contextlib.redirect_stdout(io.StringIO()):
         audio_format, channels, sample_rate = app.state.SpeechPipelineManager.audio.engine.get_stream_info()
-        app.state.Upsampler = UpsampleOverlap(input_sample_rate=48000, input_format='int16')
-        
+        input_format = 'float32' if audio_format == pyaudio.paFloat32 else 'int16'
+        app.state.Upsampler = SileroAudioConverter()        
         app.state.AudioInputProcessor = AudioInputProcessor(
             LANGUAGE_APP,
             is_orpheus=False,
@@ -1020,7 +1048,7 @@ async def trigger_initial_greeting(app: FastAPI, message_queue: asyncio.Queue, c
     try:
         await asyncio.sleep(0.5)
         
-        greeting_text = "Hi Joji"
+        greeting_text = "Привет Джордж"
         
         callbacks.tts_to_client = True
         callbacks.final_assistant_answer_sent = True

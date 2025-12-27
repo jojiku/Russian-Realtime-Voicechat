@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
 
-LANGUAGE = os.getenv('LANGUAGE', 'en')
+LANGUAGE = os.getenv('LANGUAGE', 'ru')
 class AudioInputProcessor:
     """
     Manages audio input, processes it for transcription, and handles related callbacks.
