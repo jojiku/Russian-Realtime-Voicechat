@@ -10,16 +10,17 @@
     </td>
   </tr>
 </table>
-**выложено 30% функционала на данный момент**
+
+**Выложено 40% функционала на данный момент**
 
 Список некоторых особенностей:
+- Стриминг TTS (RealtimeTTS)
+- Стриминг STT (RealtimeSTT - faster whisper)
+- Прерывание речи бота
+- Adressee detection (дообученный rubert на OpenSTT датасете) позволяет модели различать когда обращаются к ней а когда нет.
+- Turn detection (дообученный rubert на синтетическом датасете + знаки пунктуации) позволяет быстро понимать когда пользователь закончил свою мысль.
 
-- ➡️ Стриминг TTS (RealtimeTTS)
-- ✍️ Стриминг STT (RealtimeSTT - faster whisper)
-- 🔄 Прерывание речи бота
-- 🎯 Context awareness (fine-tuned distilbert).
-
-##Credits
+## Credits
 Замечательный код от Kolja Beigel
 - https://github.com/KoljaB/RealtimeTTS
 - https://github.com/KoljaB/RealtimeVoiceChat
