@@ -21,3 +21,9 @@ code/dist/
 # Project specific
 code/ProactiveAgent/
 *.deb
+
+code/test.py
+code/tests.ipynb
+
+*.onnx
+code/turndetect_test.py
