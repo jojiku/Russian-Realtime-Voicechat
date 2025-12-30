@@ -7,7 +7,7 @@ from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassifica
 logger = logging.getLogger(__name__)
 
 class AddresseeDetector:
-    def __init__(self, model_path="models/addressee_detector/checkpoint-408", tokenizer_path = "models/addressee_detector/tokenizer"):
+    def __init__(self, model_path="models/addressee_detector/en_ver/checkpoint-408", tokenizer_path = "models/addressee_detector/en_ver/tokenizer"):
         """
         The brain police. Decides if you are worthy of my attention.
         """

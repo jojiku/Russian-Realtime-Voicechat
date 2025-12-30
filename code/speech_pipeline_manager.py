@@ -30,7 +30,7 @@ language = os.getenv('APP_LANG')
 current_folder = Path()
 
 
-
+use_addressee = False
 use_rag = False
 USE_ORPHEUS_UNCENSORED = False
 
@@ -177,11 +177,12 @@ class SpeechPipelineManager:
             raise
 
         # Initialize Addressee Detector
-        try:
-            self.addressee_detector = AddresseeDetector("models/addressee_detector/checkpoint-408")
-        except Exception as e:
-            console.log(f"[red]💥 Failed to load addressee detector: {e}")
-            raise
+        if use_addressee == True:
+            try:
+                self.addressee_detector = AddresseeDetector()
+            except Exception as e:
+                console.log(f"[red]💥 Failed to load addressee detector: {e}")
+                raise
 
         self.last_ai_speech_end_time = 0.0
         self.on_ignored_utterance: Optional[Callable[[str, float], None]] = None
@@ -882,12 +883,12 @@ class SpeechPipelineManager:
         # Force a large time if this is the first interaction
         if self.last_ai_speech_end_time == 0:
             time_since_ai = 999.0
+        if use_addressee == True:
+            is_addressed_to_ai = self.addressee_detector.should_reply(txt, time_since_ai)
 
-        is_addressed_to_ai = self.addressee_detector.should_reply(txt, time_since_ai)
-
-        if not is_addressed_to_ai:
-            logger.info(f"🚫 Ignoring utterance: '{txt}' (Not addressed to me)")
-            return
+            if not is_addressed_to_ai:
+                logger.info(f"🚫 Ignoring utterance: '{txt}' (Not addressed to me)")
+                return
 
         # --- Create new generation object ---
         self.running_generation = RunningGeneration(id=new_gen_id)
