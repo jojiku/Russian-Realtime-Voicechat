@@ -30,7 +30,7 @@ language = os.getenv('APP_LANG')
 current_folder = Path()
 
 
-use_addressee = False
+use_addressee = True
 use_rag = False
 USE_ORPHEUS_UNCENSORED = False
 
@@ -890,7 +890,6 @@ class SpeechPipelineManager:
             is_addressed_to_ai = self.addressee_detector.should_reply(txt, time_since_ai)
 
             if not is_addressed_to_ai:
-                logger.info(f"🚫 Ignoring utterance: '{txt}' (Not addressed to me)")
                 return
 
         # --- Create new generation object ---

@@ -7,10 +7,10 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-class AddresseeDetector:
-    def __init__(self, model_path="models/addressee_detector/ru_ver/checkpoint-102", 
+class AddresseeDetector: 
+    def __init__(self, model_path="models/addressee_detector/ru_ver/", 
                  tokenizer_path="models/addressee_detector/rubert"):
-        """The brain police. Decides if you are worthy of my attention."""
+        """The brain police.  Decides if you are worthy of my attention."""
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         tokenizer_loader = AutoTokenizer.from_pretrained(tokenizer_path)
         
@@ -30,11 +30,13 @@ class AddresseeDetector:
         # State tracking
         self.last_interaction_time = 0
         
-        # Configuration
-        self.WAKE_WORDS = ["lucy", "computer", "assistant"]
-        self.BASE_THRESHOLD = 0.55  # Lowered for active conversations
-        self.CONVERSATION_WINDOW = 10.0  # Extended to 10 seconds
-        self.CONTEXT_BOOST = 0.35  # Increased boost during active conversation
+        # Configuration  
+        self.WAKE_WORDS = ["люси", "компьютер", "ассистент", "lucy", "computer", "assistant"]
+        self.CONVERSATION_WINDOW = 10.0
+        
+        # Thresholds for three-tier system
+        self.HIGH_THRESHOLD = 0.75
+        self.LOW_THRESHOLD = 0.25
 
     def predict(self, text):
         """Returns probability (0.0 - 1.0) that text is addressed to Lucy."""
@@ -52,36 +54,37 @@ class AddresseeDetector:
         return 0.0
 
     def should_reply(self, text, time_since_ai_spoke):
-        """The Master Logic. Simple version."""
+        """
+        Simple logic: 
+        1. Wake word = YES
+        2. Within 5s of last AI response = YES (unless model is VERY sure it's not for us)
+        3. Cold start = trust the model
+        """
         text_lower = text.lower().strip()
         
-        # Wake word = instant yes
-        for word in self.WAKE_WORDS:
-            if word in text_lower:
-                logger.info(f"Wake word detected: '{word}'")
-                self.last_interaction_time = time.time()
+        # === WAKE WORDS:  Always yes ===
+        for word in self.WAKE_WORDS: 
+            if word.lower() in text_lower:
                 return True
         
-        # Get base prediction
         base_score = self.predict(text)
+        in_conversation = time_since_ai_spoke < 5.0
         
-        # Apply context boost if we're in active conversation
-        final_score = base_score
-        if time_since_ai_spoke < self.CONVERSATION_WINDOW:
-            decay_factor = 1.0 - (time_since_ai_spoke / self.CONVERSATION_WINDOW)
-            final_score += self.CONTEXT_BOOST * decay_factor
-        
-        final_score = min(1.0, final_score)
-        
-        logger.info(f"Analysis: Base={base_score:.2f} | Final={final_score:.2f} | Threshold={self.BASE_THRESHOLD}")
-        
-        # Single threshold decision
-        should_reply = final_score >= self.BASE_THRESHOLD
-        
-        if should_reply:
-            self.last_interaction_time = time.time()
-        
-        return should_reply
+        if in_conversation:
+            # Recently talked = assume they're still talking to us
+            # UNLESS model is very confident it's NOT for us (< 0.15)
+            if base_score < 0.15:
+                logger.info(f"[ACTIVE] score={base_score:.2f} < 0.15 -> NO (model very confident)")
+                return False
+            else: 
+                logger.info(f"[ACTIVE] score={base_score:.2f} within 5s -> YES")
+                return True
+        else: 
+            # Cold start = need model confidence
+            threshold = 0.5
+            result = base_score >= threshold
+            logger.info(f"[COLD] score={base_score:.2f} >= {threshold} -> {result}")
+            return result
 
 if __name__=="__main__":
     from sklearn.metrics import accuracy_score, precision_recall_fscore_support, confusion_matrix
@@ -163,7 +166,7 @@ if __name__=="__main__":
     print(f"Running inference on {len(test_texts)} cases...")
 
     for text in test_texts:
-        pred = classifier.predict(text, 2)
+        pred = classifier.predict(text)
         pred = np.round(pred)
         predictions.append(pred)
 
@@ -201,3 +204,162 @@ if __name__=="__main__":
 
     if not has_failures:
         print("All tests passed perfectly!")
+
+    #=================================================================
+    print("\n" + "="*70)
+    print("THREE-TIER LOGIC ANALYSIS")
+    print("="*70)
+    print(f"HIGH_THRESHOLD (Tier2 YES): >= {classifier.HIGH_THRESHOLD}")
+    print(f"LOW_THRESHOLD (Tier2 NO):   <= {classifier.LOW_THRESHOLD}")
+    print(f"AMBIGUOUS ZONE (Tier3):     {classifier.LOW_THRESHOLD} < score < {classifier.HIGH_THRESHOLD}")
+    print("="*70 + "\n")
+    
+    # Test phrases with their expected tier behavior
+    test_phrases = [
+        # (text, description)
+        ("Люси, привет!", "Wake word - should be TIER1"),
+        ("эй компьютер", "Wake word - should be TIER1"),
+        ("покажи логи", "Clear command - likely TIER2-YES or high TIER3"),
+        ("перезапусти сервер", "Clear command"),
+        ("блин, этот кофе говно", "Self-talk - should be TIER2-NO"),
+        ("бля, я устал", "Self-talk - should be TIER2-NO"),
+        ("она такая умная", "Talking ABOUT AI - should be TIER2-NO"),
+        ("интересно.. .", "Ambiguous - should be TIER3"),
+        ("да", "Ambiguous - should be TIER3"),
+        ("нет, не то", "Ambiguous - should be TIER3"),
+        ("хм, понятно", "Ambiguous - should be TIER3"),
+        ("продолжай", "Ambiguous command - likely TIER3"),
+        ("ты понимаешь? ", "Ambiguous question - likely TIER3"),
+        ("как у тебя дела?", "Conversational - likely TIER3"),
+        ("а что если попробовать?", "Follow-up - likely TIER3"),
+    ]
+    
+    print(f"{'Text':<45} {'Score': >6} {'Tier':<12} {'Cold': >6} {'@1s':>6} {'@5s':>6}")
+    print("-"*85)
+    
+    for text, desc in test_phrases: 
+        score = classifier.predict(text)
+        
+        # Determine tier
+        text_lower = text.lower()
+        is_wake = any(w in text_lower for w in classifier.WAKE_WORDS)
+        
+        if is_wake:
+            tier = "TIER1-WAKE"
+        elif score >= classifier.HIGH_THRESHOLD:
+            tier = "TIER2-YES"
+        elif score <= classifier.LOW_THRESHOLD:
+            tier = "TIER2-NO"
+        else:
+            tier = "TIER3-AMB"
+        
+        # Test at different time contexts
+        cold_result = classifier.should_reply(text, 100.0)
+        at_1s = classifier.should_reply(text, 1.0)
+        at_5s = classifier.should_reply(text, 5.0)
+        
+        cold_str = "✅" if cold_result else "❌"
+        at_1s_str = "✅" if at_1s else "❌"
+        at_5s_str = "✅" if at_5s else "❌"
+        
+        print(f"{text:<45} {score:>6.2f} {tier:<12} {cold_str:>6} {at_1s_str:>6} {at_5s_str: >6}")
+    
+    print("\n" + "="*70)
+    print("Legend:  Cold = no recent AI speech | @1s/@5s = seconds since AI spoke")
+    print("="*70)
+
+
+    
+    print("\n" + "="*70)
+    print("AMBIGUOUS PHRASES:  CONTEXT SENSITIVITY TEST")
+    print("="*70)
+    print("These phrases are INTENTIONALLY ambiguous.  The model can't know.")
+    print("Context (time since AI spoke) should be the deciding factor.")
+    print("="*70 + "\n")
+    
+    ambiguous = [
+        "интересно...",
+        "да",
+        "нет",
+        "понятно",
+        "хорошо",
+        "окей",
+        "продолжай",
+        "дальше",
+        "а потом? ",
+        "и что? ",
+        "серьезно?",
+        "ого",
+        "ну давай",
+        "попробуй",
+    ]
+    
+    time_points = [0.5, 1.0, 2.0, 3.0, 5.0, 7.0, 9.0, 15.0]
+    
+    print(f"{'Phrase':<20}", end="")
+    for t in time_points:
+        print(f"{t:>5}s", end=" ")
+    print(f"{'Score':>7}")
+    print("-" * 75)
+    
+    for phrase in ambiguous:
+        score = classifier.predict(phrase)
+        print(f"{phrase:<20}", end="")
+        
+        for t in time_points:
+            result = classifier.should_reply(phrase, t)
+            symbol = "✅" if result else "·"  # Using dot for cleaner view
+            print(f"{symbol: >5}", end=" ")
+        
+        print(f"{score:>7.2f}")
+    
+    print("\n" + "-"*75)
+    print("✅ = will reply | · = will ignore")
+    print(f"Conversation window: {classifier.CONVERSATION_WINDOW}s")
+
+
+    
+    print("\n" + "="*70)
+    print("REALISTIC CONVERSATION SIMULATION")
+    print("="*70 + "\n")
+    
+    last_ai_spoke = 0
+    
+    conversation = [
+        # (user_says, delay_seconds, expected_response, scenario_note)
+        ("Люси, привет!", 0, True, "Wake word starts convo"),
+        ("как дела?", 1.5, True, "Quick follow-up"),
+        ("а что ты умеешь?", 2.0, True, "Continuing conversation"),
+        ("интересно", 1.0, True, "Short reaction - AMBIGUOUS but recent"),
+        ("покажи пример", 1.5, True, "Command in active convo"),
+        ("ага, понял", 2.0, True, "Confirmation"),
+        # User turns away to talk to friend
+        ("Вась, глянь что она умеет", 5.0, False, "Talking to friend Vasya"),
+        ("да, прикольная штука", 3.0, False, "Still talking to friend"),
+        ("ну ладно, пойдем", 4.0, False, "Leaving with friend"),
+        # Long pause, comes back
+        ("Люси, еще вопрос", 20.0, True, "Wake word after long pause"),
+        ("спасибо, все понятно", 2.0, True, "Closing in active convo"),
+    ]
+    
+    for user_text, delay, expected, note in conversation:
+        if delay > 0:
+            print(f"    ... {delay}s pause ...")
+            time.sleep(delay)
+        
+        if last_ai_spoke == 0:
+            time_since_ai = 999
+        else: 
+            time_since_ai = time.time() - last_ai_spoke
+        
+        result = classifier.should_reply(user_text, time_since_ai)
+        
+        status = "✅" if result == expected else "❌"
+        print(f"{status} User: \"{user_text}\"")
+        print(f"   ⏱ {time_since_ai:.1f}s since AI | Expected: {expected} | Got: {result}")
+        print(f"   📝 {note}")
+        
+        if result: 
+            print(f"   🤖 AI responds...")
+            last_ai_spoke = time.time()
+        print()
