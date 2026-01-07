@@ -1,25 +1,26 @@
-# Adressee_detector.py
+# addressee_detector.py
 import logging
 import time
 import torch
-import numpy as np
 from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification
+import numpy as np
+
 logger = logging.getLogger(__name__)
 
 class AddresseeDetector:
-    def __init__(self, model_path="models/addressee_detector/checkpoint-408", tokenizer_path = "models/addressee_detector/tokenizer"):
-        """
-        The brain police. Decides if you are worthy of my attention.
-        """
+    def __init__(self, model_path="models/addressee_detector/ru_ver/checkpoint-102", 
+                 tokenizer_path="models/addressee_detector/rubert"):
+        """The brain police. Decides if you are worthy of my attention."""
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         tokenizer_loader = AutoTokenizer.from_pretrained(tokenizer_path)
+        
         try:
             self.classifier = pipeline(
                 "text-classification", 
                 model=model_path, 
                 tokenizer=tokenizer_loader,
                 device=0 if self.device == "cuda" else -1,
-                top_k=None # Return all scores
+                top_k=None
             )
             logger.info("AddresseeDetector loaded.")
         except Exception as e:
@@ -28,125 +29,175 @@ class AddresseeDetector:
 
         # State tracking
         self.last_interaction_time = 0
-        self.conversation_momentum = 0.0 # 0.0 to 1.0
         
         # Configuration
         self.WAKE_WORDS = ["lucy", "computer", "assistant"]
-        self.CONFIDENCE_THRESHOLD_HIGH = 0.85
-        self.CONFIDENCE_THRESHOLD_LOW = 0.35 # Gray zone floor
-        
-        # Time constants
-        self.MOMENTUM_DECAY_SECONDS = 30.0
-        self.HOT_CONVERSATION_WINDOW = 10.0 # Seconds where I'm paying full attention
+        self.BASE_THRESHOLD = 0.55  # Lowered for active conversations
+        self.CONVERSATION_WINDOW = 10.0  # Extended to 10 seconds
+        self.CONTEXT_BOOST = 0.35  # Increased boost during active conversation
 
-    def predict(self, text, time_since_last_response=None):
-        """
-        Returns probability (0.0 - 1.0) that text is addressed to Lucy.
-        """
+    def predict(self, text):
+        """Returns probability (0.0 - 1.0) that text is addressed to Lucy."""
         if not self.classifier:
-            return 1.0 # Fail open if model missing
-
-        # 1. Base Model Prediction
-        results = self.classifier(text)[0] # List of dicts [{'label': 'LABEL_0', 'score': 0.9}, ...]
+            return 1.0
         
-        # Extract score for LABEL_1 (Addressing Lucy)
-        label_1_score = 0.0
+        results = self.classifier(text)[0]
+        
         for res in results:
             if res['label'] == 'LABEL_1':
-                label_1_score = res['score']
-                break
+                return res['score']
             if res['label'] == 'LABEL_0':
-                label_1_score = 1.0 - res['score']
-                
-        return label_1_score
+                return 1.0 - res['score']
+        
+        return 0.0
 
     def should_reply(self, text, time_since_ai_spoke):
-        """
-        The Master Logic. Applies heuristics to the base prediction.
-        """
+        """The Master Logic. Simple version."""
         text_lower = text.lower().strip()
-        now = time.time()
         
-        # --- Rule 15: Explicit Wake Word Override ---
-        # If you say my name, I listen. Period.
+        # Wake word = instant yes
         for word in self.WAKE_WORDS:
             if word in text_lower:
-                logger.info(f"👀👂 Explicit wake word detected: '{word}'")
-                self._update_momentum(hit=True)
+                logger.info(f"Wake word detected: '{word}'")
+                self.last_interaction_time = time.time()
                 return True
-
-        # --- Rule 3: Utterance Length Penalty ---
-        # Don't trigger on "okay", "shit", "nice" unless we are DEEP in conversation
-        word_count = len(text.split())
-        length_penalty = 0.0
-        if word_count <= 2:
-            length_penalty = 0.25 # Heavy penalty for short grunts
-        elif word_count <= 4:
-            length_penalty = 0.1
-
-        # --- Rule 1 & 4: Context & Time Boost ---
-        # If I just spoke, you are likely replying to me.
-        # Decay this boost linearly over HOT_CONVERSATION_WINDOW seconds.
-        time_boost = 0.0
-        if time_since_ai_spoke < self.HOT_CONVERSATION_WINDOW:
-            # e.g., 0s elapsed -> 1.0 factor. 10s elapsed -> 0.0 factor.
-            decay_factor = 1.0 - (time_since_ai_spoke / self.HOT_CONVERSATION_WINDOW)
-            time_boost = 0.3 * decay_factor # Max 0.3 boost
-
-        # --- Rule 1: Momentum ---
-        # If we've been chatting, I'm more likely to listen.
-        # Decay momentum if it's been a while since you addressed me.
-        time_since_last_interaction = now - self.last_interaction_time
-        if time_since_last_interaction > self.MOMENTUM_DECAY_SECONDS:
-            self.conversation_momentum = 0.0
         
-        momentum_boost = self.conversation_momentum * 0.15 # Max 0.15 boost
-
-        # --- Get Base Score ---
+        # Get base prediction
         base_score = self.predict(text)
-
-        # --- Calculate Final Score ---
-        final_score = base_score + time_boost + momentum_boost - length_penalty
         
-        # Clamp
-        final_score = max(0.0, min(1.0, final_score))
-
-        logger.info(f"👀 Analysis: Base={base_score:.2f} | TimeBoost={time_boost:.2f} | Momentum={momentum_boost:.2f} | LenPen={length_penalty:.2f} | FINAL={final_score:.2f}")
-
-        # --- Decision Time (Rule 2: Thresholds) ---
-        should_reply = False
+        # Apply context boost if we're in active conversation
+        final_score = base_score
+        if time_since_ai_spoke < self.CONVERSATION_WINDOW:
+            decay_factor = 1.0 - (time_since_ai_spoke / self.CONVERSATION_WINDOW)
+            final_score += self.CONTEXT_BOOST * decay_factor
         
-        if final_score > self.CONFIDENCE_THRESHOLD_HIGH:
-            should_reply = True
-        elif final_score > self.CONFIDENCE_THRESHOLD_LOW:
-            # Gray zone logic: If we are already in a "hot" flow, lean yes.
-            if time_since_ai_spoke < 5.0 or self.conversation_momentum > 0.5:
-                should_reply = True
-                logger.info("👀 Gray zone ACCEPT (Context/Momentum saved you)")
-            else:
-                should_reply = False
-                logger.info("👀 Gray zone REJECT (Not enough context)")
-        else:
-            should_reply = False
-
+        final_score = min(1.0, final_score)
+        
+        logger.info(f"Analysis: Base={base_score:.2f} | Final={final_score:.2f} | Threshold={self.BASE_THRESHOLD}")
+        
+        # Single threshold decision
+        should_reply = final_score >= self.BASE_THRESHOLD
+        
         if should_reply:
-            self._update_momentum(hit=True)
-        else:
-            self._update_momentum(hit=False)
-        logger.info("should I talk score:", final_score)
-        return should_reply#, final_score
-
-    def _update_momentum(self, hit=True):
-        self.last_interaction_time = time.time()
-        if hit:
-            # Boost momentum, cap at 1.0
-            self.conversation_momentum = min(1.0, self.conversation_momentum + 0.3)
-        else:
-            # Decay momentum on ignore
-            self.conversation_momentum = max(0.0, self.conversation_momentum - 0.2)
+            self.last_interaction_time = time.time()
+        
+        return should_reply
 
 if __name__=="__main__":
-    addressee_detector = AddresseeDetector()
-    print(addressee_detector.should_reply("yo Lucy u playin safe today?", 2)) # Should give True
-    print(addressee_detector.should_reply("She knows when i speak not to her", 2)) # Should give False
-    print(addressee_detector.should_reply("she is a smart girl", 2)) # Should give False
+    from sklearn.metrics import accuracy_score, precision_recall_fscore_support, confusion_matrix
+
+    classifier = AddresseeDetector()
+
+    # 2. Define Test Data (Extracted from your list)
+    # Format: (text, expected_label)
+    raw_data = [
+        ("блин, этот кофе полное говно", 0),
+        ("Люся, который сейчас час?", 1),
+        ("бля, я так устал", 0),
+        ("эй Люся, помоги мне", 1),
+        ("код вообще пиздец какой-то", 0),
+        ("Люся, код полный пиздец, помоги разобраться", 1),
+        ("привет, как дела вообще?", 0),
+        ("йо Люся", 1),
+        ("привет народ / как дела пацаны", 0),
+        ("ну ты сам знаешь как бывает", 0),
+        ("я думаю тебе стоит", 0),
+        ("что вообще блять происходит", 0),
+        ("эй ассистент, как дела?", 1),
+        ("ассистент, можешь помочь мне с этим разобраться?", 1),
+        ("ладно ассистент", 1),
+        ("компьютер, помоги мне", 1),
+        ("эй компьютер", 1),
+        ("тебе надо на это посмотреть", 1), 
+        ("нам надо это починить", 0),
+        ("кто-нибудь помогите", 0),
+        ("кто-нибудь знает почему?", 0),
+        ("может кто объяснит?", 0),
+        ("куда я это положил?", 0),
+        ("когда это было в последний раз?", 0),
+        ("кто это сломал?", 0),
+        ("какой вариант лучше?", 0),
+        ("почему это дерьмо не работает?", 0),
+        ("ты не поверишь", 0),
+        ("нам нужно больше времени", 0),
+        ("тут какая-то проблема", 0),
+        ("что-то тут не так", 0),
+        ("все нахуй сломалось", 0),
+        ("покажи логи", 1),
+        ("проверь базу данных", 1),
+        ("запусти тесты снова", 1),
+        ("останови сервер", 1),
+        ("перезапусти все", 1),
+        ("зачем я так сделал?", 0),
+        ("о чем я вообще думал?", 0),
+        ("как это вообще когда-то работало?", 0),
+        ("куда я вообще с этим шел?", 0),
+        ("когда это все сломалось?", 0),
+        ("ну типа есть такая штука с...", 0),
+        ("да, но проблема в том что", 0),
+        ("окей, короче говоря", 0),
+        ("я имею в виду, суть в том что", 0),
+        ("ну очевидно же что мы не можем", 0),
+        ("ты понимаешь о чем я?", 1),
+        ("не могу поверить в это дерьмо", 0),
+        ("вы че ребята издеваетесь", 0),
+        ("остановите это", 0),
+        ("почини этот бардак", 1),
+        ("ладно, похуй, идем дальше", 0),
+        ("похуй, сам разберусь", 0),
+        ("ладно, допустим это работает", 0),
+        ("ну ладно тогда", 0),
+        ("прикольная история бро", 0),
+        ("она понимает обращаюсь я к ней или нет", 0),
+        ("да, она реально умная", 0),
+        ("и она прикольная еще", 0),
+        ("она просто классная", 0),
+        ("да, она лучшая пока что", 0)
+    ]
+
+    test_texts = [x[0] for x in raw_data]
+    test_labels = np.array([x[1] for x in raw_data])
+
+    # 3. Inference Loop
+    predictions = []
+    print(f"Running inference on {len(test_texts)} cases...")
+
+    for text in test_texts:
+        pred = classifier.predict(text, 2)
+        pred = np.round(pred)
+        predictions.append(pred)
+
+    # 4. Metrics Calculation
+    predictions = np.array(predictions)
+    accuracy = accuracy_score(test_labels, predictions)
+    precision, recall, f1, _ = precision_recall_fscore_support(test_labels, predictions, average='binary', zero_division=0)
+    cm = confusion_matrix(test_labels, predictions)
+
+    # 5. Print Report
+    print("\n" + "="*50)
+    print("ADDRESSEE DETECTOR EVALUATION")
+    print("="*50)
+    print(f"Accuracy:           {accuracy*100:.2f}%")
+    print(f"Precision:          {precision*100:.2f}%")
+    print(f"Recall:             {recall*100:.2f}%")
+    print(f"F1-Score:           {f1*100:.2f}%")
+    print("-" * 50)
+    print("Confusion Matrix:")
+    print(f"Predicted [0] | Actual [0]: {cm[0][0]} (TN)")
+    print(f"Predicted [1] | Actual [0]: {cm[0][1]} (FP)")
+    print(f"Predicted [0] | Actual [1]: {cm[1][0]} (FN)")
+    print(f"Predicted [1] | Actual [1]: {cm[1][1]} (TP)")
+    print("="*50)
+
+    # 6. Show Failures
+    print("\nFAILED TEST CASES:")
+    has_failures = False
+    for i, (text, true_label, pred_label) in enumerate(zip(test_texts, test_labels, predictions)):
+        if true_label != pred_label:
+            has_failures = True
+            t_name = "ADDRESSED" if true_label == 1 else "NOT_ADDRESSED"
+            p_name = "ADDRESSED" if pred_label == 1 else "NOT_ADDRESSED"
+            print(f"✖ '{text}'\n  Expected: {t_name} | Got: {p_name}\n")
+
+    if not has_failures:
+        print("All tests passed perfectly!")

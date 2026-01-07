@@ -118,7 +118,7 @@ class AudioProcessor:
         self.stream.feed("Разгон ТТС")
         play_kwargs = dict(
             log_synthesized_text=False, # Don't log prewarm text
-            muted=False,
+            muted=True,
             fast_sentence_fragment=False,
             comma_silence_duration=self.silence.comma,
             sentence_silence_duration=self.silence.sentence,

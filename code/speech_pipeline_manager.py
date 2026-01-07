@@ -30,7 +30,7 @@ language = os.getenv('APP_LANG')
 current_folder = Path()
 
 
-
+use_addressee = False
 use_rag = False
 USE_ORPHEUS_UNCENSORED = False
 
@@ -177,11 +177,12 @@ class SpeechPipelineManager:
             raise
 
         # Initialize Addressee Detector
-        # try:
-        #     self.addressee_detector = AddresseeDetector("models/addressee_detector/checkpoint-408")
-        # except Exception as e:
-        #     console.log(f"[red]💥 Failed to load addressee detector: {e}")
-        #     raise
+        if use_addressee == True:
+            try:
+                self.addressee_detector = AddresseeDetector()
+            except Exception as e:
+                console.log(f"[red]💥 Failed to load addressee detector: {e}")
+                raise
 
         self.last_ai_speech_end_time = 0.0
         self.on_ignored_utterance: Optional[Callable[[str, float], None]] = None
@@ -702,7 +703,9 @@ class SpeechPipelineManager:
                 else:
                     logger.info(f"🗣️👄✅ [Gen {gen_id}] Quick TTS Finished Successfully.")
                     current_gen.tts_quick_finished_event.set() # Signal natural completion
-
+                if not current_gen.quick_answer_provided:  # No final TTS coming
+                    if not current_gen.audio_quick_aborted:
+                        self.last_ai_speech_end_time = time.time()
                 current_gen.audio_quick_finished = True
 
     def _tts_final_inference_worker(self):
@@ -732,8 +735,7 @@ class SpeechPipelineManager:
             if current_gen.tts_final_started: continue # Final TTS already running for this gen
             if not current_gen.tts_quick_started: continue # Quick TTS hasn't even started
             if not current_gen.audio_quick_finished: continue # Quick TTS hasn't finished (successfully or aborted)
-            if current_gen.audio_final_finished:
-                self.last_ai_speech_end_time = time.time()
+           
             gen_id = current_gen.id # Get ID once prerequisites seem met
 
             # --- Check conditions to *start* final TTS ---
@@ -832,6 +834,8 @@ class SpeechPipelineManager:
                     current_gen.tts_final_finished_event.set() # Signal natural completion
 
                 current_gen.audio_final_finished = True
+                if not current_gen.audio_final_aborted:
+                    self.last_ai_speech_end_time = time.time()
 
 
     # --- Processing Methods ---
@@ -882,12 +886,12 @@ class SpeechPipelineManager:
         # Force a large time if this is the first interaction
         if self.last_ai_speech_end_time == 0:
             time_since_ai = 999.0
+        if use_addressee == True:
+            is_addressed_to_ai = self.addressee_detector.should_reply(txt, time_since_ai)
 
-        # is_addressed_to_ai = self.addressee_detector.should_reply(txt, time_since_ai)
-
-        # if not is_addressed_to_ai:
-        #     logger.info(f"🚫 Ignoring utterance: '{txt}' (Not addressed to me)")
-        #     return
+            if not is_addressed_to_ai:
+                logger.info(f"🚫 Ignoring utterance: '{txt}' (Not addressed to me)")
+                return
 
         # --- Create new generation object ---
         self.running_generation = RunningGeneration(id=new_gen_id)
