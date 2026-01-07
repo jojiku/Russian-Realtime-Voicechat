@@ -849,3 +849,31 @@ class TranscriptionProcessor:
             logger.info("👂🔌 TranscriptionProcessor shutdown process finished.")
         else:
             logger.info("👂ℹ️ Shutdown already performed.")
+
+
+if __name__=="__main__":
+    from RealtimeSTT import AudioToTextRecorder
+
+    def process_text(text):
+        print(f"\rConfirmed: {text}", end="\n")
+
+    def text_detected(text):
+        print(f"\rRealtime: {text}", end="", flush=True)
+
+    if __name__ == '__main__':
+        recorder_config = {
+            'model': 'base.en',
+            'realtime_model_type': 'base.en',
+            'language': 'en',
+            'enable_realtime_transcription': True,
+            'on_realtime_transcription_update': text_detected,
+        }
+
+        recorder = AudioToTextRecorder(**recorder_config)
+
+        print("Say something...")
+        try:
+            while True:
+                recorder.text(process_text)
+        except KeyboardInterrupt:
+            print("\nStopped.")

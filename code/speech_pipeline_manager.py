@@ -703,7 +703,9 @@ class SpeechPipelineManager:
                 else:
                     logger.info(f"🗣️👄✅ [Gen {gen_id}] Quick TTS Finished Successfully.")
                     current_gen.tts_quick_finished_event.set() # Signal natural completion
-
+                if not current_gen.quick_answer_provided:  # No final TTS coming
+                    if not current_gen.audio_quick_aborted:
+                        self.last_ai_speech_end_time = time.time()
                 current_gen.audio_quick_finished = True
 
     def _tts_final_inference_worker(self):
@@ -733,8 +735,7 @@ class SpeechPipelineManager:
             if current_gen.tts_final_started: continue # Final TTS already running for this gen
             if not current_gen.tts_quick_started: continue # Quick TTS hasn't even started
             if not current_gen.audio_quick_finished: continue # Quick TTS hasn't finished (successfully or aborted)
-            if current_gen.audio_final_finished:
-                self.last_ai_speech_end_time = time.time()
+           
             gen_id = current_gen.id # Get ID once prerequisites seem met
 
             # --- Check conditions to *start* final TTS ---
@@ -833,6 +834,8 @@ class SpeechPipelineManager:
                     current_gen.tts_final_finished_event.set() # Signal natural completion
 
                 current_gen.audio_final_finished = True
+                if not current_gen.audio_final_aborted:
+                    self.last_ai_speech_end_time = time.time()
 
 
     # --- Processing Methods ---

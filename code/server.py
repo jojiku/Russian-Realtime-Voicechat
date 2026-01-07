@@ -35,7 +35,7 @@ load_dotenv()
 # These constants define what Lucy is when she wakes up.
 # ============================================================================
 
-TTS_START_ENGINE = "kokoro"
+TTS_START_ENGINE = "soprano"
 LLM_START_MODEL = "exaone-3.5-2.4b-instruct"
 LLM_START_PROVIDER = "lmstudio"
 language = os.getenv('APP_LANG')
@@ -230,7 +230,7 @@ async def lifespan(app: FastAPI):
         
         # with suppress_c_logs(): # Kills C-level stderr (JACK)
         #     with contextlib.redirect_stdout(io.StringIO()):
-        audio_format, channels, sample_rate = app.state.SpeechPipelineManager.audio.engine.get_stream_info()
+        # audio_format, channels, sample_rate = app.state.SpeechPipelineManager.audio.engine.get_stream_info()
         app.state.Upsampler = UpsampleOverlap(input_sample_rate=48000, input_format='int16')
         
         app.state.AudioInputProcessor = AudioInputProcessor(
@@ -239,7 +239,7 @@ async def lifespan(app: FastAPI):
             pipeline_latency=app.state.SpeechPipelineManager.full_output_pipeline_latency / 1000,
         )
         
-        progress.update(task2, description=f"[bold cyan]Audio Active ({sample_rate}Hz)")
+        progress.update(task2, description=f"[bold cyan]Audio Active")
 
         # --- Task 3: Frontend ---
         task3 = progress.add_task("Configuring User Interaction Panel...", total=None)

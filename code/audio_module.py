@@ -32,6 +32,7 @@ def suppress_jack_spam():
 
 import pyaudio
 from RealtimeTTS import TextToAudioStream, KokoroEngine
+from soprano_engine import SopranoEngine
 
 import struct
 import threading
@@ -53,10 +54,11 @@ load_dotenv()
 language = os.getenv('APP_LANG')
 LANGUAGE = language
 # Default configuration constants
-START_ENGINE = "kokoro" 
+START_ENGINE = "soprano" 
 Silence = namedtuple("Silence", ("comma", "sentence", "default"))
 ENGINE_SILENCES = {
-    "kokoro":  Silence(comma=0.3, sentence=0.6, default=0.3)
+    "kokoro":  Silence(comma=0.3, sentence=0.6, default=0.3),
+    "soprano":  Silence(comma=0.3, sentence=0.6, default=0.3)
     }
 
 QUICK_ANSWER_STREAM_CHUNK_SIZE = 8
@@ -105,43 +107,54 @@ class AudioProcessor:
         self.silence = ENGINE_SILENCES.get(engine, ENGINE_SILENCES[self.engine_name])
         self.current_stream_chunk_size = QUICK_ANSWER_STREAM_CHUNK_SIZE
 
-        self.engine = KokoroEngine(
-                voice="af_heart",
-                default_speed=1,
-                trim_silence=True,
-                silence_threshold=0.01,
-                extra_start_ms=25,
-                extra_end_ms=15,
-                fade_in_ms=15,
-                fade_out_ms=10,
-            )
-        
-        self.stream = TextToAudioStream(
-                self.engine,
-                muted=True, 
-                playout_chunk_size=4096, 
-                on_audio_stream_stop=self.on_audio_stream_stop,
-                language=LANGUAGE,
-                log_characters=False,
-                on_word=self.process_word
-            )
+        if START_ENGINE == "kokoro":
+            self.engine = KokoroEngine(
+                    voice="af_heart",
+                    default_speed=1,
+                    trim_silence=True,
+                    silence_threshold=0.01,
+                    extra_start_ms=25,
+                    extra_end_ms=15,
+                    fade_in_ms=15,
+                    fade_out_ms=10,
+                )
             
+            self.stream = TextToAudioStream(
+                    self.engine,
+                    muted=True, 
+                    playout_chunk_size=4096, 
+                    on_audio_stream_stop=self.on_audio_stream_stop,
+                    language=LANGUAGE,
+                    log_characters=False,
+                    on_word=self.process_word
+                )
+
+        elif START_ENGINE == "soprano":
+            self.engine = SopranoEngine(debug=False, playback_chunk_size=1024, chunk_size=15, output_sample_rate=24000)
+            self.stream = TextToAudioStream(
+                self.engine,
+                muted=True,
+                on_audio_stream_stop=self.on_audio_stream_stop,
+                frames_per_buffer=1024,
+                playout_chunk_size=1024
+            )
+
+
         # Prewarm the engine
         self.stream.feed("prewarm")
         play_kwargs = dict(
             log_synthesized_text=False, # Don't log prewarm text
-            muted=False,
+            muted=True,
             fast_sentence_fragment=False,
             comma_silence_duration=self.silence.comma,
             sentence_silence_duration=self.silence.sentence,
             default_silence_duration=self.silence.default,
             force_first_fragment_after_words=999999, # Effectively disable this
         )
-        self.stream.play(**play_kwargs) # Synchronous play for prewarm
-        # Wait for prewarm to finish (indicated by on_audio_stream_stop)
+        self.stream.play(**play_kwargs)
         while self.stream.is_playing():
             time.sleep(0.01)
-        self.finished_event.wait() # Wait for stop callback
+        self.finished_event.wait()
         self.finished_event.clear()
 
         # Measure Time To First Audio (TTFA)
