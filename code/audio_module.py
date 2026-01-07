@@ -509,3 +509,29 @@ class AudioProcessor:
 
         logger.info(f"👄✅ {generation_string} Final answer synthesis complete.")
         return True # Indicate successful completion
+    
+    def shutdown(self):
+        print("🔊 AudioProcessor:  Shutting down...")
+        
+        # Shutdown the engine (SileroEngine in your case)
+        if hasattr(self, 'engine') and self.engine is not None:
+            try:
+                if hasattr(self.engine, 'shutdown'):
+                    self.engine.shutdown()
+                else:
+                    # Fallback:  delete model directly if no shutdown method
+                    if hasattr(self.engine, 'model') and self.engine.model is not None:
+                        del self.enginemodel
+                        self.engine.model = None
+            except Exception as e: 
+                print(f"🔊 Error shutting down TTS engine: {e}")
+            self.engine = None
+        
+        # Force CUDA cleanup
+        try:
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except Exception:
+            pass
+        

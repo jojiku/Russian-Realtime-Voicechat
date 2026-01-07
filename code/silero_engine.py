@@ -193,8 +193,43 @@ class SileroEngine(BaseEngine):
             return False
 
     def shutdown(self):
-        """Shuts down the engine."""
+        """Release TTS engine and GPU resources."""
+        print("[SileroEngine] Shutting down...")
+        
+        # Stop any ongoing synthesis
+        if hasattr(self, 'stop_synthesis_event') and self.stop_synthesis_event: 
+            self.stop_synthesis_event.set()
+        
+        # Delete the model
+        if hasattr(self, 'model') and self.model is not None:
+            try:
+                # Move model to CPU first to free GPU memory more reliably
+                self.model.to('cpu')
+                del self.model
+                self.model = None
+                print("[SileroEngine] Model deleted.")
+            except Exception as e:
+                print(f"[SileroEngine] Error deleting model: {e}")
+        
+        # Force CUDA cleanup
+        try: 
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                torch.cuda.synchronize()
+                print("[SileroEngine] CUDA cache cleared.")
+        except Exception as e: 
+            print(f"[SileroEngine] Error clearing CUDA cache: {e}")
+        
         print("[SileroEngine] Shutdown complete.")
+
+    def __del__(self):
+        """Destructor - attempt cleanup if shutdown wasn't called."""
+        try:
+            if hasattr(self, 'model') and self.model is not None: 
+                self.shutdown()
+        except Exception: 
+            pass
+        
 
 
 if __name__ == "__main__":

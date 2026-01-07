@@ -245,8 +245,7 @@ async def lifespan(app: FastAPI):
         app.state.SpeechPipelineManager = SpeechPipelineManager(
             tts_engine=TTS_START_ENGINE,
             llm_provider=LLM_START_PROVIDER,
-            llm_model=LLM_START_MODEL,
-            orpheus_model='',
+            llm_model=LLM_START_MODEL
         )
                 
         llm_lat = app.state.SpeechPipelineManager.llm_inference_time
@@ -325,7 +324,32 @@ async def lifespan(app: FastAPI):
     
     # --- SHUTDOWN ---
     console.print("[bold red]Initiating Shutdown Sequence...[/]")
-    app.state.AudioInputProcessor.shutdown()
+    if hasattr(app.state, 'AudioInputProcessor') and app.state.AudioInputProcessor: 
+        try:
+            app.state.AudioInputProcessor.shutdown()
+        except Exception as e:
+            console.print(f"[yellow]Warning shutting down AudioInputProcessor: {e}")
+    
+    # Shutdown SpeechPipelineManager (includes LLM, TTS, AddresseeDetector)
+    if hasattr(app.state, 'SpeechPipelineManager') and app.state.SpeechPipelineManager:
+        try:
+            app.state.SpeechPipelineManager.shutdown()
+        except Exception as e: 
+            console.print(f"[yellow]Warning shutting down SpeechPipelineManager: {e}")
+    
+    # Final cleanup
+    try:
+        import torch
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
+    except Exception: 
+        pass
+    
+    import gc
+    gc.collect()
+    
+    console.print("[bold green]Shutdown complete.[/]")
 
 # --------------------------------------------------------------------
 # FastAPI app instance
@@ -917,7 +941,7 @@ class TranscriptionCallbacks:
                     "content": self.assistant_answer
                 })
 
-        self.app.state.SpeechPipelineManager.history.append({"role": "user", "content": user_request_content})
+        # self.app.state.SpeechPipelineManager.history.append({"role": "user", "content": user_request_content})
 
 
     def on_final(self, txt: str):

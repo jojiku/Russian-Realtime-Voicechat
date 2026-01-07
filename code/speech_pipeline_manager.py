@@ -32,22 +32,6 @@ current_folder = Path()
 
 use_addressee = True
 use_rag = False
-USE_ORPHEUS_UNCENSORED = False
-
-orpheus_prompt_addon_normal = """
-When expressing emotions, you are ONLY allowed to use the following exact tags (including the spaces):
-" <laugh> ", " <chuckle> ", " <sigh> ", " <cough> ", " <sniffle> ", " <groan> ", " <yawn> ", and " <gasp> ".
-
-Do NOT create or use any other emotion tags. Do NOT remove the spaces. Use these tags exactly as shown, and only when appropriate.
-""".strip()
-
-orpheus_prompt_addon_uncensored = """
-When expressing emotions, you are ONLY allowed to use the following exact tags (including the spaces):
-" <moans> ", " <panting> ", " <grunting> ", " <gagging sounds> ", " <chokeing> ", " <kissing noises> ", " <laugh> ", " <chuckle> ", " <sigh> ", " <cough> ", " <sniffle> ", " <groan> ", " <yawn> ", " <gasp> ".
-Do NOT create or use any other emotion tags. Do NOT remove the spaces. Use these tags exactly as shown, and only when appropriate.
-""".strip()
-
-orpheus_prompt_addon = orpheus_prompt_addon_uncensored if USE_ORPHEUS_UNCENSORED else orpheus_prompt_addon_normal
 
 
 class PipelineRequest:
@@ -130,7 +114,6 @@ class SpeechPipelineManager:
         tts_engine: str = "kokoro",
         llm_provider: str = "openai",
         llm_model: str = "hf.co/bartowski/huihui-ai_Mistral-Small-24B-Instruct-2501-abliterated-GGUF:Q4_K_M",
-        orpheus_model: str = "orpheus-3b-0.1-ft-Q8_0-GGUF/orpheus-3b-0.1-ft-q8_0.gguf",
         use_rag: bool = use_rag
     ):
         """
@@ -140,7 +123,6 @@ class SpeechPipelineManager:
         self.tts_engine = tts_engine
         self.llm_provider = llm_provider
         self.llm_model = llm_model
-        self.orpheus_model = orpheus_model
         self.latency_tracker = LatencyTracker(history_size=10)
 
         # Load system prompt
@@ -886,10 +868,13 @@ class SpeechPipelineManager:
         # Force a large time if this is the first interaction
         if self.last_ai_speech_end_time == 0:
             time_since_ai = 999.0
-        if use_addressee == True:
+        if use_addressee: 
             is_addressed_to_ai = self.addressee_detector.should_reply(txt, time_since_ai)
-
+            
             if not is_addressed_to_ai:
+                if self.on_ignored_utterance: 
+                    score = self.addressee_detector.predict(txt)
+                    self.on_ignored_utterance(txt, score)
                 return
 
         # --- Create new generation object ---
@@ -898,24 +883,16 @@ class SpeechPipelineManager:
         self.running_generation.text = txt
 
         try:
-            logger.info(f"ðŸ—£ï¸ðŸ§ ðŸš€ [Gen {new_gen_id}] Calling LLM generate...")
-            # TODO: Update history management if needed
-            # self.history.append({"role": "user", "content": txt}) # Example history update
+            self.history.append({"role": "user", "content": txt}) 
             self.running_generation.llm_generator = self.llm.generate(
                 text=txt,
                 history=self.history, # Pass current history
                 use_system_prompt=True,
             )
-            logger.info(f"🔍 DEBUG: llm_generator created: {self.running_generation.llm_generator}")
-            logger.info(f"🔍 DEBUG: llm_generator type: {type(self.running_generation.llm_generator)}")
-            logger.info(f"🗣️🧠 ✔️ [Gen {new_gen_id}] LLM generator created. Setting generator ready event.")
-        
 
-            logger.info(f"ðŸ—£ï¸ðŸ§ âœ”ï¸ [Gen {new_gen_id}] LLM generator created. Setting generator ready event.")
-            self.generator_ready_event.set() # Signal LLM worker
+            self.generator_ready_event.set()
         except Exception as e:
-            logger.exception(f"ðŸ—£ï¸ðŸ§ ðŸ’¥ [Gen {new_gen_id}] Failed to create LLM generator: {e}")
-            self.running_generation = None # Clean up if generator creation failed
+            self.running_generation = None 
 
 
     def process_abort_generation(self):
@@ -1112,11 +1089,9 @@ class SpeechPipelineManager:
             reason: A string describing why the abort was requested (for logging).
         """
         if self.shutdown_event.is_set():
-            logger.warning("ðŸ—£ï¸ðŸ”Œ Shutdown in progress, ignoring abort request.")
             return
 
         gen_id_str = f"Gen {self.running_generation.id}" if self.running_generation else "Gen None"
-        logger.info(f"ðŸ—£ï¸ðŸ›‘ðŸš€ Requesting 'abort' (wait={wait_for_completion}, reason='{reason}') for {gen_id_str}")
 
         # Call the internal synchronous processor
         self.process_abort_generation()
@@ -1126,9 +1101,9 @@ class SpeechPipelineManager:
             logger.info(f"ðŸ—£ï¸ðŸ›‘â³ Waiting for abort completion (timeout={timeout}s)...")
             completed = self.abort_completed_event.wait(timeout=timeout)
             if completed:
-                logger.info(f"ðŸ—£ï¸ðŸ›‘âœ… Abort completion confirmed.")
+                logger.info(f"Abort completion confirmed.")
             else:
-                logger.warning(f"ðŸ—£ï¸ðŸ›‘â±ï¸ Timeout waiting for abort completion event.")
+                logger.warning(f"Timeout waiting for abort completion event.")
             # Ensure block is released after waiting, even on timeout
             self.abort_block_event.set()
 
@@ -1147,30 +1122,24 @@ class SpeechPipelineManager:
 
     def shutdown(self):
         """
-        Initiates a graceful shutdown of the pipeline manager and worker threads.
-
-        1. Sets the `shutdown_event`.
-        2. Attempts a final abort of any running generation.
-        3. Signals all relevant events to unblock any waiting worker threads.
-        4. Joins each worker thread with a timeout, logging warnings if they fail to exit.
+        Initiates a graceful shutdown of the pipeline manager, worker threads, and all models.
         """
-        logger.info("ðŸ—£ï¸ðŸ”Œ Initiating shutdown...")
+        logger.info("🗣️🔌 Initiating shutdown...")
         self.shutdown_event.set()
 
         # Try a final synchronous abort to ensure clean state before join
-        logger.info("ðŸ—£ï¸ðŸ”ŒðŸ›‘ Attempting final abort before joining threads...")
+        logger.info("🗣️🔌🛑 Attempting final abort before joining threads...")
         self.abort_generation(wait_for_completion=True, timeout=3.0, reason="shutdown")
 
-        # Wake up threads that might be waiting on events so they can check shutdown_event
-        logger.info("ðŸ—£ï¸ðŸ”ŒðŸ”” Signaling events to wake up any waiting threads...")
+        # Wake up threads that might be waiting on events
+        logger.info("🗣️🔌🔔 Signaling events to wake up any waiting threads...")
         self.generator_ready_event.set()
         self.llm_answer_ready_event.set()
-        # Also signal 'finished' and 'completion' events
         self.stop_llm_finished_event.set()
         self.stop_tts_quick_finished_event.set()
         self.stop_tts_final_finished_event.set()
         self.abort_completed_event.set()
-        self.abort_block_event.set() # Ensure request processor isn't blocked
+        self.abort_block_event.set()
 
         # Join threads
         threads_to_join = [
@@ -1181,13 +1150,51 @@ class SpeechPipelineManager:
         ]
 
         for thread, name in threads_to_join:
-             if thread.is_alive():
-                 logger.info(f"ðŸ—£ï¸ðŸ”Œâ³ Joining {name}...")
-                 thread.join(timeout=5.0)
-                 if thread.is_alive():
-                     logger.warning(f"ðŸ—£ï¸ðŸ”Œâ±ï¸ {name} thread did not join cleanly.")
-             else:
-                  logger.info(f"ðŸ—£ï¸ðŸ”ŒðŸ‘ {name} thread already finished.")
+            if thread.is_alive():
+                logger.info(f"🗣️🔌⏳ Joining {name}...")
+                thread.join(timeout=5.0)
+                if thread.is_alive():
+                    logger.warning(f"🗣️🔌⏱️ {name} thread did not join cleanly.")
+            else:
+                logger.info(f"🗣️🔌👍 {name} thread already finished.")
 
+        # Shutdown Addressee Detector
+        if hasattr(self, 'addressee_detector') and self.addressee_detector:
+            try:
+                self.addressee_detector.shutdown()
+            except Exception as e: 
+                logger.warning(f"🗣️🔌⚠️ Error shutting down AddresseeDetector: {e}")
+            self.addressee_detector = None
 
-        logger.info("ðŸ—£ï¸ðŸ”Œâœ… Shutdown complete.")
+        # Shutdown Audio/TTS
+        if hasattr(self, 'audio') and self.audio:
+            try: 
+                self.audio.shutdown()
+            except Exception as e: 
+                logger.warning(f"🗣️🔌⚠️ Error shutting down AudioProcessor: {e}")
+            self.audio = None
+
+        # Shutdown RAG if present
+        if hasattr(self, 'rag_retriever') and self.rag_retriever:
+            try: 
+                if hasattr(self.rag_retriever, 'shutdown'):
+                    self.rag_retriever.shutdown()
+            except Exception as e: 
+                logger.warning(f"🗣️🔌⚠️ Error shutting down RAG: {e}")
+            self.rag_retriever = None
+
+        # Final CUDA cleanup
+        try:
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                torch.cuda.synchronize()
+                logger.info("🗣️🔌🧹 CUDA cache cleared.")
+        except Exception as e:
+            logger.warning(f"🗣️🔌⚠️ Error clearing CUDA cache: {e}")
+
+        # Force garbage collection
+        import gc
+        gc.collect()
+
+        logger.info("🗣️🔌✅ Shutdown complete.")

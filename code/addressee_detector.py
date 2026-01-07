@@ -6,19 +6,19 @@ from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassifica
 import numpy as np
 
 logger = logging.getLogger(__name__)
+model_dir = "Silxxor/Russian-Addressee-detector"
 
 class AddresseeDetector: 
-    def __init__(self, model_path="models/addressee_detector/ru_ver/", 
-                 tokenizer_path="models/addressee_detector/rubert"):
+    def __init__(self):
         """The brain police.  Decides if you are worthy of my attention."""
+
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        tokenizer_loader = AutoTokenizer.from_pretrained(tokenizer_path)
         
         try:
             self.classifier = pipeline(
                 "text-classification", 
-                model=model_path, 
-                tokenizer=tokenizer_loader,
+                model=model_dir, 
+                tokenizer=AutoTokenizer.from_pretrained(model_dir),
                 device=0 if self.device == "cuda" else -1,
                 top_k=None
             )
@@ -27,14 +27,11 @@ class AddresseeDetector:
             logger.error(f"Failed to load addressee model: {e}")
             self.classifier = None
 
-        # State tracking
         self.last_interaction_time = 0
         
-        # Configuration  
         self.WAKE_WORDS = ["люси", "компьютер", "ассистент", "lucy", "computer", "assistant"]
         self.CONVERSATION_WINDOW = 10.0
         
-        # Thresholds for three-tier system
         self.HIGH_THRESHOLD = 0.75
         self.LOW_THRESHOLD = 0.25
 
@@ -85,14 +82,35 @@ class AddresseeDetector:
             result = base_score >= threshold
             logger.info(f"[COLD] score={base_score:.2f} >= {threshold} -> {result}")
             return result
+    
+    def shutdown(self):
+        """Release GPU memory and cleanup resources."""
+        logger.info("🧠 AddresseeDetector:  Shutting down...")
+        
+        if self.classifier is not None:
+            # Delete the pipeline and its underlying model
+            del self.classifier
+            self.classifier = None
+        
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        
+        logger.info("🧠 AddresseeDetector: Shutdown complete.")
+
+    def __del__(self):
+        """Destructor - attempt cleanup if shutdown wasn't called."""
+        try: 
+            if hasattr(self, 'classifier') and self.classifier is not None: 
+                self.shutdown()
+        except Exception: 
+            pass
+
 
 if __name__=="__main__":
     from sklearn.metrics import accuracy_score, precision_recall_fscore_support, confusion_matrix
 
     classifier = AddresseeDetector()
 
-    # 2. Define Test Data (Extracted from your list)
-    # Format: (text, expected_label)
     raw_data = [
         ("блин, этот кофе полное говно", 0),
         ("Люся, который сейчас час?", 1),
@@ -161,7 +179,6 @@ if __name__=="__main__":
     test_texts = [x[0] for x in raw_data]
     test_labels = np.array([x[1] for x in raw_data])
 
-    # 3. Inference Loop
     predictions = []
     print(f"Running inference on {len(test_texts)} cases...")
 
@@ -170,7 +187,6 @@ if __name__=="__main__":
         pred = np.round(pred)
         predictions.append(pred)
 
-    # 4. Metrics Calculation
     predictions = np.array(predictions)
     accuracy = accuracy_score(test_labels, predictions)
     precision, recall, f1, _ = precision_recall_fscore_support(test_labels, predictions, average='binary', zero_division=0)
