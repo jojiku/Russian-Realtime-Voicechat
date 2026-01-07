@@ -3,6 +3,7 @@ import logging
 import time
 import torch
 from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -162,7 +163,7 @@ if __name__=="__main__":
     print(f"Running inference on {len(test_texts)} cases...")
 
     for text in test_texts:
-        pred = classifier.predict(text, 2)
+        pred = classifier.predict(text)
         pred = np.round(pred)
         predictions.append(pred)
 
