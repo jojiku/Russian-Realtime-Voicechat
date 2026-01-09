@@ -6,7 +6,6 @@
 *.sh
 # Models & Resources
 code/models/
-**/resources/
 
 # Environment
 code/.env
@@ -27,3 +26,5 @@ code/tests.ipynb
 
 *.onnx
 code/turndetect_test.py
+
+*/.vscode

@@ -521,7 +521,7 @@ class AudioProcessor:
                 else:
                     # Fallback:  delete model directly if no shutdown method
                     if hasattr(self.engine, 'model') and self.engine.model is not None:
-                        del self.enginemodel
+                        del self.engine.model
                         self.engine.model = None
             except Exception as e: 
                 print(f"🔊 Error shutting down TTS engine: {e}")

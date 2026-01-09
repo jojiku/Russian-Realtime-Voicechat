@@ -1,0 +1,189 @@
+[tool.poetry]
+name = "Russian-Realtime-Voicechat"
+version = "0.1.0"
+description = "Легковесный голосовой чат на русском"
+authors = ["jojiku <georgeku151@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/jojiku/Russian-Realtime-Voicechat"
+keywords = ["voice-assistant", "russian", "tts", "stt", "llm", "conversational-ai"]
+python = "^3.10"
+
+[tool.poetry. dependencies]
+python = ">=3.10,<3.13"
+
+# =============================================================================
+# Web Framework & Server
+# =============================================================================
+fastapi = "^0.123.5"
+uvicorn = "^0.38.0"
+websockets = "^15.0.1"
+starlette = "^0.50.0"
+
+# =============================================================================
+# Audio Processing
+# =============================================================================
+PyAudio = "^0.2.14"
+scipy = "^1.15.2"
+numpy = "^2.2.6"
+sounddevice = "^0.5.3"
+soundfile = "^0.13.1"
+librosa = "^0.11.0"
+resampy = "^0.4.3"
+soxr = "^1.0.0"
+
+# =============================================================================
+# Speech-to-Text
+# =============================================================================
+realtimestt = "^0.3.104"
+faster-whisper = "^1.1.1"
+ctranslate2 = "^4.4.0"
+webrtcvad-wheels = "^2.0.14"
+
+# =============================================================================
+# Text-to-Speech
+# =============================================================================
+realtimetts = "^0.5.7"
+
+# =============================================================================
+# Machine Learning Core
+# =============================================================================
+torch = { version = "2.4.1+cu121", source = "pytorch-cu121" }
+torchaudio = { version = "2.4.1+cu121", source = "pytorch-cu121" }
+transformers = "^4.53.3"
+tokenizers = "^0.21.4"
+safetensors = "^0.7.0"
+accelerate = "^1.12.0"
+huggingface-hub = "^0.36.0"
+
+# =============================================================================
+# ONNX Runtime
+# =============================================================================
+onnxruntime = "^1.23.2"
+onnx = "^1.20.0"
+
+# =============================================================================
+# LLM Clients
+# =============================================================================
+openai = "^2.8.1"
+requests = "^2.32.5"
+httpx = "^0.28.1"
+google-genai = "^1.53.0"
+groq = "^0.37.1"
+ollama = "^0.6.1"
+
+# =============================================================================
+# NLP & Text Processing
+# =============================================================================
+sentencepiece = "^0.2.1"
+tiktoken = "^0.12.0"
+regex = "^2025.11.3"
+nltk = "^3.9.1"
+
+# =============================================================================
+# Russian Language Support
+# =============================================================================
+razdel = "^0.5.0"
+pymorphy3 = "^2.0.6"
+pymorphy3-dicts-ru = "^2.4.417150. 4580142"
+ruaccent = "^1.5.8.3"
+
+# =============================================================================
+# Utilities
+# =============================================================================
+python-dotenv = "^1.2.1"
+rich = "^14.2.0"
+pydantic = "^2.12.5"
+scikit-learn = "^1.7.2"
+tqdm = "^4.67.1"
+PyYAML = "^6.0.3"
+colorama = "^0.4.6"
+
+# =============================================================================
+# System Monitoring
+# =============================================================================
+psutil = "^6.0.0"
+GPUtil = "^1.4.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0.0"
+pytest-asyncio = "^0.24.0"
+black = "^24.0.0"
+isort = "^5.13.0"
+ruff = "^0.14.0"
+mypy = "^1.11.0"
+pre-commit = "^4.5.0"
+
+# =============================================================================
+# PyTorch Sources (CUDA 12.1)
+# =============================================================================
+[[tool.poetry.source]]
+name = "pytorch-cu121"
+url = "https://download.pytorch.org/whl/cu121"
+priority = "explicit"
+
+[[tool.poetry.source]]
+name = "PyPI"
+priority = "primary"
+
+# =============================================================================
+# Scripts
+# =============================================================================
+[tool.poetry.scripts]
+Voicechat = "server: main"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+# =============================================================================
+# Tool Configurations
+# =============================================================================
+
+[tool.black]
+line-length = 100
+target-version = ['py310', 'py311', 'py312']
+exclude = '''
+/(
+    \.git
+    | \.venv
+    | venv
+    | dist
+    | build
+    | node_modules
+    | __pycache__
+)/
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 100
+skip = [". git", ". venv", "venv", "dist", "build", "node_modules"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+exclude = [
+    ". git",
+    ". venv",
+    "venv",
+    "dist",
+    "build",
+    "node_modules",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "C4"]
+ignore = ["E501"]  # Line too long (handled by formatter)
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_ignores = true
+ignore_missing_imports = true
+exclude = ["dist", "build", "node_modules"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]

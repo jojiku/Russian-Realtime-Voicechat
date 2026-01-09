@@ -6,7 +6,6 @@ import logging
 import time
 from queue import Queue, Empty
 import sys
-from rag_module import RAGRetriever, RAGEnhancedLLM, create_rag_retriever
 import re
 from rich.console import Console
 console = Console()
@@ -31,7 +30,6 @@ current_folder = Path()
 
 
 use_addressee = True
-use_rag = False
 
 
 class PipelineRequest:
@@ -114,7 +112,6 @@ class SpeechPipelineManager:
         tts_engine: str = "kokoro",
         llm_provider: str = "openai",
         llm_model: str = "hf.co/bartowski/huihui-ai_Mistral-Small-24B-Instruct-2501-abliterated-GGUF:Q4_K_M",
-        use_rag: bool = use_rag
     ):
         """
         Initializes the SpeechPipelineManager with Rich console feedback.
@@ -169,24 +166,7 @@ class SpeechPipelineManager:
         self.last_ai_speech_end_time = 0.0
         self.on_ignored_utterance: Optional[Callable[[str, float], None]] = None
 
-        # Initialize RAG if enabled
-        self.rag_retriever = None
-        if use_rag:
-            try:
-                console.log("[cyan]🔍 Initializing RAG retriever...")
-                self.rag_retriever = create_rag_retriever()
-                
-                if self.rag_retriever: 
-                    self.llm = RAGEnhancedLLM(
-                        llm=self.llm,
-                        rag_retriever=self.rag_retriever,
-                        inject_context=True,
-                    )
-                    console.log("[green]✅ RAG-enhanced LLM ready")
-                else: 
-                    console.log("[yellow]⚠️  RAG initialization returned None, continuing without RAG")
-            except Exception as e:
-                console.log(f"[yellow]⚠️  RAG initialization failed: {e}, continuing without RAG")
+
 
         # Prewarm and measure LLM
         try:
@@ -1174,14 +1154,7 @@ class SpeechPipelineManager:
                 logger.warning(f"🗣️🔌⚠️ Error shutting down AudioProcessor: {e}")
             self.audio = None
 
-        # Shutdown RAG if present
-        if hasattr(self, 'rag_retriever') and self.rag_retriever:
-            try: 
-                if hasattr(self.rag_retriever, 'shutdown'):
-                    self.rag_retriever.shutdown()
-            except Exception as e: 
-                logger.warning(f"🗣️🔌⚠️ Error shutting down RAG: {e}")
-            self.rag_retriever = None
+     
 
         # Final CUDA cleanup
         try:
