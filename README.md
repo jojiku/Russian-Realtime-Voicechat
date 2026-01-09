@@ -72,12 +72,14 @@ poetry install
 ### 3. Настройте окружение
 
 ```bash
+cd Russian-Realtime-Voicechat/code
 cp .env.template .env
 ```
 
 ### 4. Установите фронтенд
 
 ```bash
+cd Russian-Realtime-Voicechat/code
 npm install
 ```
 
@@ -105,10 +107,6 @@ TORCH_CUDA_ARCH_LIST=7.5
 ```bash
 # Вариант 1: Используя poetry run
 poetry run python server.py
-
-# Вариант 2: Сначала активируйте окружение
-poetry shell
-python server.py
 ```
 
 ### Откройте интерфейс
