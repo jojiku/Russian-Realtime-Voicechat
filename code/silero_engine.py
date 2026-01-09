@@ -67,17 +67,56 @@ class SileroEngine(BaseEngine):
         
     def load_model(self):
         """Downloads and loads the Silero model."""
+        import time
+        
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(self.local_file_path), exist_ok=True)
+        
+        # Download if needed
         if not os.path.isfile(self.local_file_path):
             print(f"[SileroEngine] Downloading model from {self.model_url}...")
-            torch.hub.download_url_to_file(self.model_url, self.local_file_path)
-
+            temp_path = self.local_file_path + '.download'
+            
+            try:
+                # Download to temporary file first
+                torch.hub.download_url_to_file(self.model_url, temp_path)
+                
+                # Verify the download completed
+                if not os.path.exists(temp_path):
+                    raise FileNotFoundError(f"Download failed - temp file not created: {temp_path}")
+                
+                # Move to final location atomically
+                os.replace(temp_path, self.local_file_path)
+                print(f"[SileroEngine] Model download complete.")
+                
+            except Exception as e:
+                # Clean up partial downloads
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
+                raise RuntimeError(f"Model download failed: {e}")
+        
+        # Wait for any partial downloads to clear (safety check)
+        max_wait = 10
+        waited = 0
+        while any(f.endswith('.partial') for f in os.listdir(os.path.dirname(self.local_file_path))):
+            if waited >= max_wait:
+                raise RuntimeError("Timed out waiting for partial downloads to complete")
+            time.sleep(1)
+            waited += 1
+        
+        # Load the model
         try:
+            print(f"[SileroEngine] Loading model from {self.local_file_path}...")
             self.model = torch.package.PackageImporter(self.local_file_path).load_pickle("tts_models", "model")
             self.model.to(self.device)
             print(f"[SileroEngine] Model loaded successfully on device: {self.device}")
         except Exception as e:
             print(f"[SileroEngine] Error loading model: {e}")
+            # Clean up corrupted file
+            if os.path.exists(self.local_file_path):
+                os.remove(self.local_file_path)
             self.model = None
+            raise
 
     def get_stream_info(self):
         """Returns PyAudio stream format: 32-bit float, 1 channel, sample rate."""
