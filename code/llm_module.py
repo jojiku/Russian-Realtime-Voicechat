@@ -742,7 +742,6 @@ class LLM:
                     "model": self.model,
                     "contents": gemini_contents,
                 }
-                logger.info(f"🤖💬 [{req_id}] Sending Gemini request")
                 
                 stream_iterator = self.gemini_client.models.generate_content_stream(**payload)
                 stream_object_to_register = stream_iterator

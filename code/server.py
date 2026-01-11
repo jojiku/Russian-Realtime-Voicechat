@@ -36,8 +36,8 @@ load_dotenv()
 # ============================================================================
 
 TTS_START_ENGINE = "silero"
-LLM_START_MODEL = "vikhrmodels-vikhr-llama-3.2-1b-instruct"
-LLM_START_PROVIDER = "lmstudio"
+LLM_START_MODEL = "gemini-2.5-flash-lite"
+LLM_START_PROVIDER = "gemini"
 language = os.getenv('APP_LANG')
 LANGUAGE_APP = language
 

@@ -414,9 +414,9 @@ class SpeechPipelineManager:
                         
                         context, overhang = self.text_context.get_context(
                             raw_text,
-                            min_len=3,
-                            max_len=120,
-                            min_alnum_count=5
+                            min_len=2,
+                            max_len=40,
+                            min_alnum_count=3
                         )
 
                         if context:
