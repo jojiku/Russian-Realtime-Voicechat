@@ -27,4 +27,4 @@ code/tests.ipynb
 *.onnx
 code/turndetect_test.py
 
-*/.vscode
+.vscode/
