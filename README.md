@@ -7,7 +7,10 @@
   <tr>
     <td>
       <video src=https://github.com/user-attachments/assets/d4c5789e-1d4e-46a6-9968-22582a02a198 controls preload></video>
-    </td>
+    </td> 
+    <td>
+      <video src=https://github.com/user-attachments/assets/8d90517a-5e16-43f7-841c-a39df80417ba controls preload></video>
+    </td> 
   </tr>
 </table>
 
